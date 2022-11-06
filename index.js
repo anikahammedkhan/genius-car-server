@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const cors = require('cors');
 const port = process.env.PORT || 5000;
+const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
@@ -9,8 +10,24 @@ app.use(cors());
 app.use(express.json());
 
 
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.4kqreoc.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
+
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        res.status(401).send({ message: 'Unauthorized Access' });
+    }
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+        if (err) {
+            res.status(403).send({ message: 'Invalid Token' });
+        }
+        req.user = user;
+        next();
+    });
+}
 
 async function run() {
     try {
@@ -29,7 +46,7 @@ async function run() {
             const service = await serviceCollection.findOne(query);
             res.send(service);
         });
-        app.get('/orders', async (req, res) => {
+        app.get('/orders', verifyJWT, async (req, res) => {
             let query = req.query;
             if (query.email) {
                 query = { email: query.email };
@@ -52,6 +69,11 @@ async function run() {
             const newValues = { $set: { status: status } };
             const result = await orderCollection.updateOne(query, newValues);
             res.send(result);
+        });
+
+        app.post('/jwt', async (req, res) => {
+            const token = jwt.sign({ email: req.body.email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+            res.send({ token });
         });
 
 
