@@ -20,11 +20,11 @@ function verifyJWT(req, res, next) {
         res.status(401).send({ message: 'Unauthorized Access' });
     }
     const token = authHeader.split(' ')[1];
-    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         if (err) {
             res.status(403).send({ message: 'Invalid Token' });
         }
-        req.user = user;
+        req.decoded = decoded;
         next();
     });
 }
@@ -47,6 +47,10 @@ async function run() {
             res.send(service);
         });
         app.get('/orders', verifyJWT, async (req, res) => {
+            const decoded = req.decoded;
+            if (decoded.email !== req.query.email) {
+                res.status(401).send({ message: 'Unauthorized Access' });
+            }
             let query = req.query;
             if (query.email) {
                 query = { email: query.email };
@@ -56,13 +60,13 @@ async function run() {
             res.send(orders);
         });
 
-        app.post('/orders', async (req, res) => {
+        app.post('/orders', verifyJWT, async (req, res) => {
             const order = req.body;
             const result = await orderCollection.insertOne(order);
             res.send(result);
         });
 
-        app.patch('/orders/:id', async (req, res) => {
+        app.patch('/orders/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const status = req.body.status;
             const query = { _id: ObjectId(id) };
@@ -77,7 +81,7 @@ async function run() {
         });
 
 
-        app.delete('/orders/:id', async (req, res) => {
+        app.delete('/orders/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const query = { _id: ObjectId(id) };
             const result = await orderCollection.deleteOne(query);
